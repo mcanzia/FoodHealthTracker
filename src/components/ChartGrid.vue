@@ -15,9 +15,6 @@
                 </div>            
             </b-col>
         </b-row>
-        
-                        <!--<vue-draggable-resizable :parent="true" :lock-aspect-ratio="true" :maxWidth="500" :maxHeight="500" :minHeight="320" :minWidth="320" :w="400" :h="400" :grid=[80,80] class="chart-slot">
-                        </vue-draggable-resizable>-->
     </b-container>
 </template>
 
@@ -53,17 +50,6 @@ export default {
         this.setParentSize();
     },
     methods: {
-        getParentSize () {
-            const style = window.getComputedStyle(this.$el.parentNode, null)
-            console.log("style --> " + style);
-            console.log("Width --> "+ parseInt(style.getPropertyValue('width'), 10));
-            console.log("Height --> "+ parseInt(style.getPropertyValue('height'), 10));
-        },
-        setParentSize () {
-            const style = window.getComputedStyle(this.$el.parentNode, null)
-            this.width = parseInt(style.getPropertyValue('width'), 10);
-            //this.height = parseInt(style.getPropertyValue('height'), 10);
-        },
         addNewChart() {
             this.$emit('add-new-chart', true);
         },

@@ -10,10 +10,7 @@ import 'bootstrap/dist/css/bootstrap.css'
 import 'bootstrap-vue/dist/bootstrap-vue.css'
 import router from './router'
 import { createPinia, PiniaVuePlugin } from 'pinia'
-import VueDraggableResizable from 'vue-draggable-resizable'
-//import 'vue-draggable-resizable/dist/VueDraggableResizable.css'
 
-Vue.use(VueDraggableResizable)
 Vue.use(PiniaVuePlugin)
 Vue.use(VueCompositionApi)
 Vue.use(firestorePlugin)
