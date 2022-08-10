@@ -18,9 +18,9 @@
         <b-col></b-col>
         <b-col cols="8">
             <b-card>
-                <b-list-group v-for="item in dateLogStore.foodItems" :key="item">
+                <b-list-group v-for="item in dateLogStore.foodItems" :key="item.name">
                     <b-list-group-item>
-                        {{ item }} 
+                        {{ item.name }} 
                         <span class="change-icon">
                             <b-icon icon="dash-circle" class="bi right mt-1" variant="danger"></b-icon>
                             <b-icon icon="dash-circle-fill" class="bi right mt-1" variant="danger" @click="removeFoodItem(item)"></b-icon>
@@ -59,16 +59,19 @@
 import { useDateLogStore } from '../stores/dateLogStore';
 import { useComponentStore } from '../stores/componentStore';
 import { useComponentDateLogStore } from '../stores/componentDateLogStore';
+import { useFoodStore } from '../stores/foodStore';
 export default {
     setup() {
         const dateLogStore = useDateLogStore();
         const componentStore = useComponentStore();
         const componentDateLogStore = useComponentDateLogStore();
+        const foodStore = useFoodStore();
 
         return {
             dateLogStore,
             componentStore,
-            componentDateLogStore
+            componentDateLogStore,
+            foodStore
         }
     },
     components: {
@@ -86,11 +89,16 @@ export default {
                 return;
             }
 
-            if (this.dateLogStore.foodItems.indexOf(this.foodItem) > -1) {
+            if (this.dateLogStore.containsFoodDuplicate(this.foodItem)) {
                 return console.log("This food is already in the list");
             }
 
-            this.dateLogStore.foodItems.push(this.foodItem);
+            const newFoodItem = {
+                id: null,
+                name: this.foodItem
+            }
+
+            this.dateLogStore.foodItems.push(newFoodItem);
             this.foodItem = "";
         },
         removeFoodItem(item) {

@@ -13,8 +13,8 @@
         <b-col></b-col>
         <b-col cols="8">
             <b-card>
-                <b-list-group v-for="item in dateLogStore.foodItems" :key="item">
-                    <b-list-group-item>{{ item }}</b-list-group-item>
+                <b-list-group v-for="item in dateLogStore.foodItems" :key="item.name">
+                    <b-list-group-item>{{ item.name }}</b-list-group-item>
                 </b-list-group>
             </b-card>
         </b-col>

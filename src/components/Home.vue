@@ -44,24 +44,28 @@ import { useUserStore } from '../stores/userStore';
 import { useDateLogStore } from '../stores/dateLogStore';
 import { useComponentStore } from '../stores/componentStore';
 import { useComponentDateLogStore } from '../stores/componentDateLogStore';
+import { useFoodStore } from '../stores/foodStore';
 export default {
     setup() {
         const userStore = useUserStore();
         const dateLogStore = useDateLogStore();
         const componentStore = useComponentStore();
         const componentDateLogStore = useComponentDateLogStore();
+        const foodStore = useFoodStore();
 
         return {
             userStore,
             dateLogStore,
             componentStore,
             componentDateLogStore,
+            foodStore
         }
     },
     created() {
         this.retrieveDateLog(this.currentDateString);
         this.dayTitle = "Today";
         this.initializeComponentLists();
+        this.initializeFoodList();
         
     },
     components: {
@@ -162,6 +166,30 @@ export default {
                 console.log(error)
             }
         },
+        async initializeFoodList() {
+            try {
+                await db.collection('users')
+                        .doc(this.auth.currentUser.uid)
+                        .collection('foods')
+                        .get()
+                        .then(snapshot => {
+                            if (snapshot.empty) {
+                                return;
+                            }
+                            this.foodStore.foods = snapshot.docs.map(value => {
+                                    let foodData =
+                                        {
+                                            id: value.id,
+                                            name: value.data().name
+                                        }
+                                        return foodData;
+                                    });
+                        })
+                
+            } catch (error) {
+                console.log(error)
+            }
+        },
         async retrieveDateLog(dateSelection) {
             try {                
                 await db.collection('users')
@@ -251,6 +279,32 @@ export default {
 
             await batch.commit();
         },
+        async addFood() {
+            try {
+                var batch = db.batch();
+                for (var food of this.dateLogStore.foodItems) {
+                    if (null === food.id) {
+                        const existingFood = this.foodStore.getExistingFood(food.name);
+                        console.log(existingFood);
+                        if (existingFood !== null) {
+                            food.id = existingFood.id;
+                            continue;
+                        }
+                        const foodDoc = db.collection('users').doc(this.auth.currentUser.uid).collection('foods').doc();
+                        const newFood = 
+                            {
+                                name: food.name
+                            }
+                        batch.set(foodDoc, newFood);
+                        food.id = foodDoc.id;
+                    }
+                }
+
+                await batch.commit();
+            } catch (error) {
+                console.log(error);
+            }
+        },
         setDateLogFields(dateLogId, date, foodItems) {
             this.dateLogStore.dateLogId = dateLogId;
             this.dateLogStore.date = date;
@@ -302,6 +356,7 @@ export default {
         },
         saveOrEdit() {
             if (this.logEditMode) {
+                this.addFood();
                 if (this.dateLogStore.dateLogId != "") {
                     this.updateDateLog();
                 } else {
@@ -312,23 +367,23 @@ export default {
         },
         async goToNextDay() {
             const nextDay = addDays(this.selectedDate, 1);
-            const numDaysApart = this.differenceFromToday(nextDay).days;
-            console.log(numDaysApart);
+            const timeApart = this.differenceFromToday(nextDay);
+            console.log(timeApart);
             await this.retrieveDateLog(format(nextDay, 'MM/dd/yyyy'))
                 .then(() => {
-                    this.setDateString(numDaysApart);
+                    this.setDateString(timeApart);
                     this.initializeComponentDateLogs();
                 });
             
         },
         async goToPreviousDay() {
             const previousDay = subDays(this.selectedDate, 1);
-            const numDaysApart = this.differenceFromToday(previousDay).days;
-            console.log(numDaysApart);
+            const timeApart = this.differenceFromToday(previousDay);
+            console.log(timeApart);
             this.retrieveDateLog(format(previousDay, 'MM/dd/yyyy'));
             await this.retrieveDateLog(format(previousDay, 'MM/dd/yyyy'))
                 .then(() => {
-                    this.setDateString(numDaysApart);
+                    this.setDateString(timeApart);
                     this.initializeComponentDateLogs();
                 });
         },
@@ -339,22 +394,26 @@ export default {
                 end: this.currentDate
             });
         },
-        setDateString(numDaysApart) {
-            if (numDaysApart == 1 && isBefore(this.currentDate, this.selectedDate)) {
-                this.dayTitle = "Tomorrow";
-            } else if (numDaysApart == 0) {
-                this.dayTitle = "Today";
-            } else if (numDaysApart == 1 && isBefore(this.selectedDate, this.currentDate)) {
-                this.dayTitle = "Yesterday";
+        setDateString(timeApart) {
+            if (timeApart.months == 0 && timeApart.years == 0) {
+                if (timeApart.days == 1 && isBefore(this.currentDate, this.selectedDate)) {
+                    this.dayTitle = "Tomorrow";
+                } else if (timeApart.days == 0) {
+                    this.dayTitle = "Today";
+                } else if (timeApart.days == 1 && isBefore(this.selectedDate, this.currentDate)) {
+                    this.dayTitle = "Yesterday";
+                } else {
+                    this.dayTitle = this.selectedDate.getMonth() + 1 + "/" + this.selectedDate.getDate() + "/" + this.selectedDate.getFullYear();
+                }
             } else {
                 this.dayTitle = this.selectedDate.getMonth() + 1 + "/" + this.selectedDate.getDate() + "/" + this.selectedDate.getFullYear();
             }
         },
         async chooseDate() {
-            const numDaysApart = this.differenceFromToday(this.calendarSelection).days;
+            const timeApart = this.differenceFromToday(this.calendarSelection);
             await this.retrieveDateLog(format(this.calendarSelection, 'MM/dd/yyyy'))
                 .then(() => {
-                    this.setDateString(numDaysApart);
+                    this.setDateString(timeApart);
                 });
         },
         isEmpty(str) {

@@ -7,6 +7,14 @@ export const useDateLogStore = defineStore('dateLogStore', {
         foodItems: [],
       }),
     actions: {
+      containsFoodDuplicate(foodName) {
+          for(const food of this.foodItems) {
+              if (food.name === foodName) {
+                  return true;
+              }
+          }
+          return false;
 
+      }
     }
 })
