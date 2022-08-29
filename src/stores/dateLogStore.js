@@ -5,6 +5,7 @@ export const useDateLogStore = defineStore('dateLogStore', {
         dateLogId: "",
         date: new Date(),
         foodItems: [],
+        components: []
       }),
     actions: {
       containsFoodDuplicate(foodName) {

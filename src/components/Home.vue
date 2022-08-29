@@ -43,28 +43,25 @@ import { auth, db } from '../firebase';
 import { useUserStore } from '../stores/userStore';
 import { useDateLogStore } from '../stores/dateLogStore';
 import { useComponentStore } from '../stores/componentStore';
-import { useComponentDateLogStore } from '../stores/componentDateLogStore';
 import { useFoodStore } from '../stores/foodStore';
 export default {
     setup() {
         const userStore = useUserStore();
         const dateLogStore = useDateLogStore();
         const componentStore = useComponentStore();
-        const componentDateLogStore = useComponentDateLogStore();
         const foodStore = useFoodStore();
 
         return {
             userStore,
             dateLogStore,
             componentStore,
-            componentDateLogStore,
             foodStore
         }
     },
     created() {
+        this.initializeComponentLists();
         this.retrieveDateLog(this.currentDateString);
         this.dayTitle = "Today";
-        this.initializeComponentLists();
         this.initializeFoodList();
         
     },
@@ -107,8 +104,7 @@ export default {
                             }
                             this.componentStore.availableComponents = snapshot.docs.filter(selection => !isSelected(selection)).map(selection => setComponentData(selection));
                             this.componentStore.selectedComponents = snapshot.docs.filter(selection => isSelected(selection)).map(selection => setComponentData(selection));
-                            this.componentStore.selectedComponentMap = new Map(this.componentStore.selectedComponents.map(selection => setComponentMap(selection)));
-                            
+
                             function isSelected(component) {
                                 return component.data().selected;
                             }
@@ -125,42 +121,6 @@ export default {
                                 }
                                 return componentData;
                             }
-
-                            function setComponentMap(component) {
-                                return [component.id,
-                                        {
-                                            name: component.name,
-                                            typeId: component.typeId,
-                                            order: component.order,
-                                            selectOptions: component.selectOptions
-                                        }
-                                ];
-                            }
-
-                            if (this.isEmpty(this.dateLogStore.dateLogId)) {
-                                this.setComponentDateLogFieldsEmpty();
-                            } else {
-                                this.initializeComponentDateLogs();
-                            }
-                        })
-            } catch (error) {
-                console.log(error)
-            }
-        },
-        async initializeComponentDateLogs() {
-            try {
-                await db.collection('users')
-                        .doc(this.auth.currentUser.uid)
-                        .collection('dateComponentValues')
-                        .where('dateId', '==', this.dateLogStore.dateLogId)
-                        .get()
-                        .then(snapshot => {
-                            if (snapshot.empty) {
-                                this.setComponentDateLogFieldsEmpty();
-                                return;
-                            }
-                            this.setComponentDateLogFields(snapshot.docs);
-
                         })
             } catch (error) {
                 console.log(error)
@@ -200,11 +160,11 @@ export default {
                     .get()
                     .then(snapshot => {
                         if (snapshot.empty) {
-                            this.setDateLogFields("", dateSelection, [], 5);
+                            this.setNewDateLogFields(dateSelection);
                             return;
                         }
                         let snapshotData = snapshot.docs[0].data();
-                        this.setDateLogFields(snapshot.docs[0].id, snapshotData.date, snapshotData.foodItems);
+                        this.setExistingDateLogFields(snapshot.docs[0].id, snapshotData.date, snapshotData.foodItems, snapshotData.components);
                     })
             } catch (error) {
                 console.log(error);
@@ -218,35 +178,15 @@ export default {
                     .add({
                         date: this.dateLogStore.date,
                         foodItems: this.dateLogStore.foodItems,
+                        components: this.dateLogStore.components
                     })
                     .then(createdDateLog => {
                         this.dateLogStore.dateLogId = createdDateLog.id;
-                        this.createComponentDateLogs(createdDateLog.id);
                     })
             } catch (error) {
                 console.log(error)
             }
             
-        },
-        async createComponentDateLogs(dateLogId) {
-            var batch = db.batch();
-            const length = this.componentDateLogStore.componentDateLogs.length;
-            for (var i = 0; i < length; i++) {
-                this.componentDateLogStore.componentDateLogs[i].dateId = dateLogId;
-                const componentDateLogDoc = db.collection('users').doc(this.auth.currentUser.uid).collection('dateComponentValues').doc();
-                this.componentDateLogStore.componentDateLogs[i].id = componentDateLogDoc.id;
-                const newComponentDateLog = 
-                {
-                    componentId: this.componentDateLogStore.componentDateLogs[i].componentId,
-                    dateId: this.componentDateLogStore.componentDateLogs[i].dateId,
-                    multiValues: this.componentDateLogStore.componentDateLogs[i].multiValues,
-                    singleValue: this.componentDateLogStore.componentDateLogs[i].singleValue,
-                    sliderValue: this.componentDateLogStore.componentDateLogs[i].sliderValue
-                }
-                batch.set(componentDateLogDoc, newComponentDateLog);
-            }
-
-            await batch.commit();
         },
         async updateDateLog() {
             try {
@@ -255,29 +195,12 @@ export default {
                     .collection('dateLogs')
                     .doc(this.dateLogStore.dateLogId)
                     .update({
-                        foodItems: this.dateLogStore.foodItems
+                        foodItems: this.dateLogStore.foodItems,
+                        components: this.dateLogStore.components,
                     })
-                    .then(() => {
-                        this.updateComponentDateLogs();
-                    });
             } catch (error) {
                 console.log(error);
             }
-        },
-        async updateComponentDateLogs() {
-            var batch = db.batch();
-            const length = this.componentDateLogStore.componentDateLogs.length;
-            for (var i = 0; i < length; i++) {
-                const componentDateLogDoc = db.collection('users').doc(this.auth.currentUser.uid).collection('dateComponentValues').doc(this.componentDateLogStore.componentDateLogs[i].id);
-                batch.update(componentDateLogDoc, 
-                {
-                    multiValues: this.componentDateLogStore.componentDateLogs[i].multiValues,
-                    singleValue: this.componentDateLogStore.componentDateLogs[i].singleValue,
-                    sliderValue: this.componentDateLogStore.componentDateLogs[i].sliderValue,
-                });
-            }
-
-            await batch.commit();
         },
         async addFood() {
             try {
@@ -305,54 +228,41 @@ export default {
                 console.log(error);
             }
         },
-        setDateLogFields(dateLogId, date, foodItems) {
+        setNewDateLogFields(date) {
+            this.dateLogStore.dateLogId = "";
+            this.dateLogStore.date = date;
+            this.dateLogStore.foodItems = [];
+            this.dateLogStore.components = this.componentStore.selectedComponents.map(comp => {
+                const componentDetails = {
+                    id: comp.id,
+                    name: comp.name,
+                    typeId: comp.typeId,
+                    order: comp.order,
+                    selectOptions: comp.selectOptions,
+                }
+                switch (comp.typeId) {
+                    case 1:
+                        componentDetails.value = 5;
+                        break;
+                    case 2:
+                        componentDetails.value = "";
+                        break;
+                    case 3:
+                        componentDetails.values = [];
+                        break;
+                }
+                return componentDetails;
+            })
+            this.calendarSelection = new Date(date);
+            this.dateLogStore.components.sort((a,b) => a.order - b.order);
+        },
+        setExistingDateLogFields(dateLogId, date, foodItems, components) {
             this.dateLogStore.dateLogId = dateLogId;
             this.dateLogStore.date = date;
             this.dateLogStore.foodItems = foodItems;
+            this.dateLogStore.components = components;
+            this.dateLogStore.components.sort((a,b) => a.order - b.order);
             this.calendarSelection = new Date(date);
-        },
-        setComponentDateLogFields(values) {
-            this.componentDateLogStore.componentDateLogs = 
-                values.map(value => {
-                    const component = this.componentStore.selectedComponentMap.get(value.data().componentId);
-                    let componentDateLogData =
-                    {
-                        id: value.id,
-                        dateId: value.data().dateId,
-                        componentId: value.data().componentId,
-                        componentName: component.name,
-                        componentSelectOptions: component.selectOptions,
-                        typeId: component.typeId,
-                        order: component.order,
-                        sliderValue: value.data().sliderValue,
-                        singleValue: value.data().singleValue,
-                        multiValues: value.data().multiValues,
-                    }
-                    return componentDateLogData;
-                });
-            this.componentDateLogStore.componentDateLogs.sort((a,b) => a.order - b.order);
-        
-        },
-        setComponentDateLogFieldsEmpty() {
-            this.componentDateLogStore.componentDateLogs = [];
-            for (const index in this.componentStore.selectedComponents) {
-                const component = this.componentStore.selectedComponents[index];
-                this.componentDateLogStore.componentDateLogs.push(
-                    {
-                        id: "",
-                        dateId: "",
-                        componentId: component.id,
-                        componentName: component.name,
-                        componentSelectOptions: component.selectOptions,
-                        typeId: component.typeId,
-                        order: component.order,
-                        sliderValue: 5,
-                        singleValue: "",
-                        multiValues: []
-                    }
-                );
-            }
-            this.componentDateLogStore.componentDateLogs.sort((a,b) => a.order - b.order);     
         },
         saveOrEdit() {
             if (this.logEditMode) {
@@ -372,7 +282,6 @@ export default {
             await this.retrieveDateLog(format(nextDay, 'MM/dd/yyyy'))
                 .then(() => {
                     this.setDateString(timeApart);
-                    this.initializeComponentDateLogs();
                 });
             
         },
@@ -380,11 +289,9 @@ export default {
             const previousDay = subDays(this.selectedDate, 1);
             const timeApart = this.differenceFromToday(previousDay);
             console.log(timeApart);
-            this.retrieveDateLog(format(previousDay, 'MM/dd/yyyy'));
             await this.retrieveDateLog(format(previousDay, 'MM/dd/yyyy'))
                 .then(() => {
                     this.setDateString(timeApart);
-                    this.initializeComponentDateLogs();
                 });
         },
         differenceFromToday(targetDate) {

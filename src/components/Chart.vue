@@ -28,19 +28,27 @@ export default {
     created() {
         bus.$on('chart-update', () => {
             this.chart.update();
-        })
+        });
+        bus.$on('chart-type-update', () => {
+            this.chart.destroy();
+            this.chartDetails.chartOptions.scales = {};
+            this.createChartContext();
+        });
     },
     mounted() {
-        const ctx = document.getElementById(this.chartDetails.id);
-        this.chart = new Chart(ctx, {
-            type: this.chartType,
-            data: this.chartData,
-            options: this.chartOptions
-            });    
+        this.createChartContext();
     },
     components: {
     },
     methods: {
+        createChartContext() {
+            const ctx = document.getElementById(this.chartDetails.id);
+            this.chart = new Chart(ctx, {
+                type: this.chartDetails.chartType,
+                data: this.chartDetails.chartData,
+                options: this.chartDetails.chartOptions
+            }); 
+        }
     },
 }
 </script>

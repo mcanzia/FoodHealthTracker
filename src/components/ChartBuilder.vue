@@ -6,6 +6,14 @@
                 <label for="chart-title">Chart Title</label>
                 <b-form-input id="chart-title" v-model="newChart.chartOptions.plugins.title.text" @blur="updateTempChartTitle"></b-form-input>
                 <br />
+                <label for="chart-type-select">Chart Type</label>
+                <b-form-select id="chart-type-select" v-model="newChart.chartType" @change="updateTempChartType">
+                    <option v-for="option in typeSelectOptions" :key="option" :value="option">
+                        {{ option }}
+                    </option>
+                </b-form-select>
+                <br />
+                <br />
                 <label for="chart-component-select">Chart Component</label>
                 <b-form-select id="chart-component-select" v-model="componentSelection" @change="updateTempChartComponent">
                     <option v-for="option in componentSelectOptions" :key="option.id" :value="option">
@@ -21,7 +29,11 @@
                 <b-form-datepicker id="chart-end-date-select" v-model="newChart.chartData.endDate"></b-form-datepicker>
                 <br />
                 <label for="target-food-select">Target Food</label>
-                <b-form-select id="target-food-select" :options="this.foodStore.foods" text-field="name"></b-form-select>
+                <b-form-select id="target-food-select" v-model="foodSelection" @change="updateTempChartComponent">
+                    <option v-for="option in foodStore.foods" :key="option.id" :value="option">
+                        {{ option.name }}
+                    </option>
+                </b-form-select>
                 <br />
                 <br />
                 <b-button type="submit" variant="primary">Save</b-button>
@@ -39,6 +51,7 @@ import { useFoodStore } from '../stores/foodStore';
 import { useChartStore } from '../stores/chartStore';
 import ChartGrid from './ChartGrid.vue';
 import { bus } from '../main';
+import { format} from 'date-fns';
 export default {
     setup() {
         const componentStore = useComponentStore();
@@ -56,7 +69,7 @@ export default {
             auth,
             db,
             newChart: {
-                type: "",
+                chartType: "",
                 chartData: {
                     labels: [],
                     datasets: [],
@@ -73,8 +86,11 @@ export default {
                 },
                 building: false,
             },
+            dateLogs: [],
             componentSelectOptions: [],
+            typeSelectOptions: [],
             componentSelection: null,
+            foodSelection: null,
             sidebarVisible: false,
         }
     },
@@ -84,6 +100,8 @@ export default {
     created() {
         this.getComponentsFromDb();
         this.initializeFoodList();
+        this.getAllDateLogs();
+        this.initializeTypeOptions();
     },
     computed: {
         maxStartDate() {
@@ -124,11 +142,11 @@ export default {
         createTempChart() {
             const id = db.collection('users').doc(this.auth.currentUser.uid).collection('charts').doc().id;
             const chartData = {
-                    labels: ["", ""],
+                    labels: ["","",""],
                     datasets: [
                         {
                             label: "",
-                            data: [5, 10]
+                            data: [5, 10, 15]
                         }
                     ],
                     startDate: '',
@@ -150,15 +168,106 @@ export default {
                 building: true,
             });
         },
+        updateTempChartType() {
+            this.chartStore.charts[this.chartStoreLastIndex].chartType = this.newChart.chartType;
+            this.notifyChartTypeUpdate();
+        }, 
         updateTempChartTitle() {
             this.chartStore.charts[this.chartStoreLastIndex].chartOptions.plugins.title.text = this.newChart.chartOptions.plugins.title.text;
             this.notifyChartUpdates();
         },
         updateTempChartComponent() {
-            console.log(this.componentSelection.typeId);
+            if (this.componentSelection === null) {
+                return;
+            }
+            //const filteredDateLogs = this.dateLogs.filter(dateLog => dateLog.components)
+            switch (this.componentSelection.typeId) {
+                case 1: {
+                    console.log("SCALE");
+                    //const filteredDateLogs = this.dateLogs.filter(dateLog => { return dateLog.foods.get(this.foodSelection.id) != null; });
+                    if (this.foodSelection === null) {
+                        this.setAverageFoodValues();
+                    } else {
+                        this.setFoodValueOverTime();
+                    }
+                    break;
+                }
+                case 2: {
+                    console.log("SINGLE");
+                    break;
+                }
+                case 3: {
+                    console.log("MULTI");
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
             //this.chartStore.charts[this.chartStoreLastIndex].chartData = this.newChart.chartData;   
-            //this.notifyChartUpdates();         
+            this.notifyChartUpdates();         
         },
+        setAverageFoodValues() {
+            const foodDataValues = [];
+            this.foodStore.foods.map(food => {
+                const filteredDateLogs = this.dateLogs.filter(dateLog => { return dateLog.foods.get(food.id) != null; });
+                var average = 0;
+                filteredDateLogs.map(dateLog => {
+                    average += Number(dateLog.components.get(this.componentSelection.id));
+                });
+                average = (average / filteredDateLogs.length).toFixed(2);
+                
+                foodDataValues.push({ 
+                    name: food.name,
+                    value: average
+                });
+            });
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.labels = [];
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets = [];
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets.push({
+                label: "Average Value",
+                data: []
+            });
+            foodDataValues.map(foodDataValue => {
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.labels.push(foodDataValue.name);
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(foodDataValue.value);
+            });
+        },
+        setFoodValueOverTime() {
+            //const dateFoodValues = [];
+            const dateMonthFoodValueMap = new Map();
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.labels = [];
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets = [];
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets.push({
+                label: "Value over Time",
+                data: []
+            });
+            // TODO - find way to sort by date
+            this.dateLogs.sort((a,b) => b.date - a.date);
+            this.dateLogs.map(dateLog => {
+                if (dateLog.foods.has(this.foodSelection.id)) {
+                    const dateMonth = format(new Date(dateLog.date), "MMM");
+                    const dateYear = format(new Date(dateLog.date), "Y");
+                    const monthYear = dateMonth + "-" + dateYear;
+                    const componentWeight = dateLog.components.get(this.componentSelection.id);
+                    if (!dateMonthFoodValueMap.has(monthYear)) {
+                        var foodWeight = [componentWeight];
+                        dateMonthFoodValueMap.set(monthYear, foodWeight);
+                    } else {
+                        dateMonthFoodValueMap.get(monthYear).push(componentWeight);
+                    }
+                }
+            });
+            for (const [key, value] of dateMonthFoodValueMap.entries()) {
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.labels.push(key);
+                var average = 0;
+                value.map(weightValue => {
+                    average += Number(weightValue);
+                });
+                average = (average / value.length).toFixed(2);
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(average);
+            }
+        },  
         removeTempChart() {
             this.chartStore.charts.pop();
             this.newChart = {
@@ -178,10 +287,18 @@ export default {
                     },
                 },
                 building: false,
+                
             }
+            this.componentSelection = null;
+            this.foodSelection = null;
         },
         notifyChartUpdates() {
-            bus.$emit('chart-update', {
+            bus.$emit('chart-type-update', {
+                chart: this.chartStore.charts[this.chartStoreLastIndex]
+            });
+        },
+        notifyChartTypeUpdate() {
+            bus.$emit('chart-type-update', {
                 chart: this.chartStore.charts[this.chartStoreLastIndex]
             });
         },
@@ -197,7 +314,6 @@ export default {
                             }
                             this.componentStore.availableComponents = snapshot.docs.filter(selection => !isSelected(selection)).map(selection => setComponentData(selection));
                             this.componentStore.selectedComponents = snapshot.docs.filter(selection => isSelected(selection)).map(selection => setComponentData(selection));
-                            this.componentStore.selectedComponentMap = new Map(this.componentStore.selectedComponents.map(selection => setComponentMap(selection)));
                             this.componentSelectOptions = this.componentStore.selectedComponents;
                             
                             function isSelected(component) {
@@ -215,17 +331,6 @@ export default {
                                     selected: component.data().selected
                                 }
                                 return componentData;
-                            }
-
-                            function setComponentMap(component) {
-                                return [component.id,
-                                        {
-                                            name: component.name,
-                                            typeId: component.typeId,
-                                            order: component.order,
-                                            selectOptions: component.selectOptions
-                                        }
-                                ];
                             }
                         });
             } catch (e) {
@@ -256,6 +361,42 @@ export default {
                 console.log(error)
             }
         },
+        async getAllDateLogs() {
+            try {
+                await db.collection('users')
+                        .doc(this.auth.currentUser.uid)
+                        .collection('dateLogs')
+                        .get()
+                        .then(snapshot => {
+                            if (snapshot.empty) {
+                                return;
+                            }
+                            this.dateLogs = snapshot.docs.map(dateLog => {
+                                const foodMap = new Map();
+                                dateLog.data().foodItems.map(foodItem => {
+                                    foodMap.set(foodItem.id, foodItem.name);
+                                })
+                                const componentValueMap = new Map();
+                                dateLog.data().components.map(component => {
+                                    componentValueMap.set(component.id, component.value);
+                                })
+                                
+                                const dateLogData = {
+                                    id: dateLog.id,
+                                    date: dateLog.data().date,
+                                    foods: foodMap,
+                                    components: componentValueMap
+                                }
+                                return dateLogData;
+                            });
+                        })
+            } catch (error) {
+                console.log(error);
+            }
+        },
+        initializeTypeOptions() {
+            this.typeSelectOptions = ['bar', 'line', 'pie', 'doughnut', 'radar'];
+        }
     }
 }
 </script>

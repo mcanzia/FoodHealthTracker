@@ -91,24 +91,21 @@
 <script>
 import { useDateLogStore } from '../stores/dateLogStore';
 import { useComponentStore } from '../stores/componentStore';
-import { useComponentDateLogStore } from '../stores/componentDateLogStore';
 import { auth, db } from '../firebase';
 import draggable from 'vuedraggable';
 export default {
   setup() {
     const dateLogStore = useDateLogStore();
     const componentStore = useComponentStore();
-    const componentDateLogStore = useComponentDateLogStore();
 
     return {
       dateLogStore,
       componentStore,
-      componentDateLogStore,
     }
   },
   created() {
     this.initializeComponentLists();
-    this.getAllDateLogIds();
+    this.getAllDateLogs();
   },
   components: {
     draggable,
@@ -195,7 +192,6 @@ export default {
                     selected: false
                 })
                 .then(createdComponent => {
-                    console.log(createdComponent);
                     this.newComponent.id = createdComponent.id;
                     this.componentStore.availableComponents.push(this.newComponent);
                 })
@@ -252,44 +248,55 @@ export default {
         }
     },
     async addComponentDateLogs(component) {
+      try {
       var batch = db.batch();
-      //TODO switch to for loop
-      for (var i = 0; i < this.dateLogs.length; i++) {
-        const componentDateLogDoc = db.collection('users').doc(this.auth.currentUser.uid).collection('dateComponentValues').doc();
-        const newComponentDateLog = {
-          componentId: component.id,
-          dateId: this.dateLogs[i],
-          multiValues: [],
-          singleValue: "",
-          sliderValue: 5
-        };
-        batch.set(componentDateLogDoc, newComponentDateLog);
-      } 
+
+      this.dateLogs.map(dateLog => {
+                const dateLogDoc = db.collection('users').doc(this.auth.currentUser.uid)
+                                     .collection('dateLogs').doc(dateLog.id);
+
+                const componentToAdd = {
+                    id: component.id,
+                    name: component.name,
+                    typeId: component.typeId,
+                    order: component.order,
+                    selectOptions: component.selectOptions
+                }
+                switch (component.typeId) {
+                    case 1:
+                        componentToAdd.value = 5;
+                        break;
+                    case 2:
+                        componentToAdd.value = "";
+                        break;
+                    case 3:
+                        componentToAdd.values = [];
+                        break;
+                }
+                dateLog.components.push(componentToAdd)
+                batch.update(dateLogDoc, {components: dateLog.components});
+      });
 
       await batch.commit();
+      }catch (error) {
+        console.log(error);
+      }
     },
     async removeComponentDateLogs(component) {
       var batch = db.batch();
-      var componentDateLogDocs = [];
-      await db.collection('users')
-        .doc(this.auth.currentUser.uid)
-        .collection('dateComponentValues')
-        .where("componentId", "==", component.id)
-        .get()
-        .then(snapshot => {
-           if (snapshot.empty) {
-             return;
-           }
-           componentDateLogDocs = snapshot.docs;
-        });
-      componentDateLogDocs.map(componentDateLogDoc => {
-        batch.delete(componentDateLogDoc.ref);
+
+      this.dateLogs.map(dateLog => {
+                const dateLogDoc = db.collection('users').doc(this.auth.currentUser.uid)
+                                     .collection('dateLogs').doc(dateLog.id);
+                dateLog.components = dateLog.components.filter(dateLogComponent => 
+                                        dateLogComponent.id != component.id);
+                batch.update(dateLogDoc, {components: dateLog.components});
       });
 
       await batch.commit();
 
     },
-    async getAllDateLogIds() {
+    async getAllDateLogs() {
       await db.collection('users')
             .doc(this.auth.currentUser.uid)
             .collection('dateLogs')
@@ -298,7 +305,12 @@ export default {
                 if (snapshot.empty) {
                     this.dateLogs = [];
                 }
-                this.dateLogs = snapshot.docs.map(doc => doc.id);
+                this.dateLogs = snapshot.docs.map(doc => {
+                  return {
+                    id: doc.id,
+                    components: doc.data().components
+                  }
+                });
             });
     },
     async updateOrder() {

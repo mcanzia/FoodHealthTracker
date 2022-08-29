@@ -23,18 +23,18 @@
     <b-row>
         <b-col></b-col>
         <b-col cols="8">
-            <b-card v-for="(component) in componentDateLogStore.componentDateLogs" :key="component.componentId">
+            <b-card v-for="(component) in dateLogStore.components" :key="component.id">
                 <b-form v-if="component.typeId == 1">
-                    <label for="component-range">{{component.componentName}}</label>
-                    <b-form-input id="component-range" type="range" min="0" max="10" step="0.10" disabled class="text-center" v-model="component.sliderValue"></b-form-input>
+                    <label for="component-range">{{component.name}}</label>
+                    <b-form-input id="component-range" type="range" min="0" max="10" step="0.10" disabled class="text-center" v-model="component.value"></b-form-input>
                 </b-form>
                 <b-form v-if="component.typeId == 2">
-                    <label for="component-radio">{{component.componentName}}</label>
-                    <b-form-radio-group id="component-radio" :options="component.componentSelectOptions" text-field="text" value-field="value" disabled class="text-center" v-model="component.singleValue"></b-form-radio-group>
+                    <label for="component-radio">{{component.name}}</label>
+                    <b-form-radio-group id="component-radio" :options="component.selectOptions" text-field="text" value-field="value" disabled class="text-center" v-model="component.value"></b-form-radio-group>
                 </b-form>
                 <b-form v-if="component.typeId == 3">
-                    <label for="component-checkbox">{{component.componentName}}</label>
-                    <b-form-checkbox-group id="component-checkbox" :options="component.componentSelectOptions" text-field="text" value-field="value" disabled class="text-center" v-model="component.multiValues"></b-form-checkbox-group>
+                    <label for="component-checkbox">{{component.name}}</label>
+                    <b-form-checkbox-group id="component-checkbox" :options="component.selectOptions" text-field="text" value-field="value" disabled class="text-center" v-model="component.values"></b-form-checkbox-group>
                 </b-form>
             </b-card>
         </b-col>
@@ -46,17 +46,14 @@
 <script>
 import { useDateLogStore } from '../stores/dateLogStore';
 import { useComponentStore } from '../stores/componentStore';
-import { useComponentDateLogStore } from '../stores/componentDateLogStore';
 export default {
     setup() {
         const dateLogStore = useDateLogStore();
         const componentStore = useComponentStore();
-        const componentDateLogStore = useComponentDateLogStore();
 
         return {
             dateLogStore,
             componentStore,
-            componentDateLogStore,
         }
     },
     components: {
