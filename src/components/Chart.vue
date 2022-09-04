@@ -27,9 +27,6 @@ export default {
     },
     created() {
         bus.$on('chart-update', () => {
-            this.chart.update();
-        });
-        bus.$on('chart-type-update', () => {
             this.chart.destroy();
             this.chartDetails.chartOptions.scales = {};
             this.createChartContext();

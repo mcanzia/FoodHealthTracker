@@ -170,7 +170,7 @@ export default {
         },
         updateTempChartType() {
             this.chartStore.charts[this.chartStoreLastIndex].chartType = this.newChart.chartType;
-            this.notifyChartTypeUpdate();
+            this.notifyChartUpdates();
         }, 
         updateTempChartTitle() {
             this.chartStore.charts[this.chartStoreLastIndex].chartOptions.plugins.title.text = this.newChart.chartOptions.plugins.title.text;
@@ -180,11 +180,9 @@ export default {
             if (this.componentSelection === null) {
                 return;
             }
-            //const filteredDateLogs = this.dateLogs.filter(dateLog => dateLog.components)
             switch (this.componentSelection.typeId) {
                 case 1: {
                     console.log("SCALE");
-                    //const filteredDateLogs = this.dateLogs.filter(dateLog => { return dateLog.foods.get(this.foodSelection.id) != null; });
                     if (this.foodSelection === null) {
                         this.setAverageFoodValues();
                     } else {
@@ -194,10 +192,20 @@ export default {
                 }
                 case 2: {
                     console.log("SINGLE");
+                    if (this.foodSelection === null) {
+                        this.setComponentOptionsWeightForAllFoods();
+                    } else {
+                        this.setComponentOptionsWeightForSpecificFood();
+                    }
                     break;
                 }
                 case 3: {
                     console.log("MULTI");
+                    if (this.foodSelection === null) {
+                        this.setComponentOptionsWeightForAllFoodsMulti();
+                    } else {
+                        this.setComponentOptionsWeightForSpecificFoodMulti();
+                    }
                     break;
                 }
                 default: {
@@ -209,11 +217,12 @@ export default {
         },
         setAverageFoodValues() {
             const foodDataValues = [];
+            this.setFreshChartData("Average Value");
             this.foodStore.foods.map(food => {
                 const filteredDateLogs = this.dateLogs.filter(dateLog => { return dateLog.foods.get(food.id) != null; });
                 var average = 0;
                 filteredDateLogs.map(dateLog => {
-                    average += Number(dateLog.components.get(this.componentSelection.id));
+                    average += Number(dateLog.components.get(this.componentSelection.id).value);
                 });
                 average = (average / filteredDateLogs.length).toFixed(2);
                 
@@ -222,26 +231,14 @@ export default {
                     value: average
                 });
             });
-            this.chartStore.charts[this.chartStoreLastIndex].chartData.labels = [];
-            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets = [];
-            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets.push({
-                label: "Average Value",
-                data: []
-            });
             foodDataValues.map(foodDataValue => {
                 this.chartStore.charts[this.chartStoreLastIndex].chartData.labels.push(foodDataValue.name);
                 this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(foodDataValue.value);
             });
         },
         setFoodValueOverTime() {
-            //const dateFoodValues = [];
             const dateMonthFoodValueMap = new Map();
-            this.chartStore.charts[this.chartStoreLastIndex].chartData.labels = [];
-            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets = [];
-            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets.push({
-                label: "Value over Time",
-                data: []
-            });
+            this.setFreshChartData("Value over Time");
             // TODO - find way to sort by date
             this.dateLogs.sort((a,b) => b.date - a.date);
             this.dateLogs.map(dateLog => {
@@ -249,7 +246,7 @@ export default {
                     const dateMonth = format(new Date(dateLog.date), "MMM");
                     const dateYear = format(new Date(dateLog.date), "Y");
                     const monthYear = dateMonth + "-" + dateYear;
-                    const componentWeight = dateLog.components.get(this.componentSelection.id);
+                    const componentWeight = dateLog.components.get(this.componentSelection.id).value;
                     if (!dateMonthFoodValueMap.has(monthYear)) {
                         var foodWeight = [componentWeight];
                         dateMonthFoodValueMap.set(monthYear, foodWeight);
@@ -267,7 +264,91 @@ export default {
                 average = (average / value.length).toFixed(2);
                 this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(average);
             }
-        },  
+        },
+        setComponentOptionsWeightForAllFoods() {
+            //TODO - make sure dateLogs is not empty
+            var weightValueMap = new Map();
+            this.componentSelection.selectOptions.map(selectOption => {
+                weightValueMap.set(selectOption.value, 0);
+            });
+            this.setFreshChartData("Value Rankings for All Time");
+            this.dateLogs.map(dateLog => {
+                const componentValue = dateLog.components.get(this.componentSelection.id);
+                if (weightValueMap.has(componentValue.value)) {
+                    weightValueMap.set(componentValue.value, weightValueMap.get(componentValue.value) + 1);
+                }
+            });
+            for (const [key, value] of weightValueMap.entries()) {
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.labels.push(key);
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(value);
+            }
+
+        },
+        setComponentOptionsWeightForAllFoodsMulti() {
+            var weightValueMap = new Map();
+            this.componentSelection.selectOptions.map(selectOption => {
+                weightValueMap.set(selectOption.value, 0);
+            });
+            this.setFreshChartData("Value Rankings for All Time");
+            this.dateLogs.map(dateLog => {
+                const componentValues = dateLog.components.get(this.componentSelection.id);
+                componentValues.values.map(value => {
+                    if (weightValueMap.has(value)) {
+                        weightValueMap.set(value, weightValueMap.get(value) + 1);
+                    }
+                });   
+            });
+            for (const [key, value] of weightValueMap.entries()) {
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.labels.push(key);
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(value);
+            }
+        },
+        setComponentOptionsWeightForSpecificFood() {
+            //TODO - make sure dateLogs is not empty
+            var weightValueMap = new Map();
+            this.componentSelection.selectOptions.map(selectOption => {
+                weightValueMap.set(selectOption.value, 0);
+            });
+            this.setFreshChartData("Value Rankings for All Time");
+            this.dateLogs.filter(dateLog => dateLog.foods.has(this.foodSelection.id)).map(dateLog => {
+                const componentValue = dateLog.components.get(this.componentSelection.id);
+                if (weightValueMap.has(componentValue.value)) {
+                    weightValueMap.set(componentValue.value, weightValueMap.get(componentValue.value) + 1);
+                }
+            });
+            for (const [key, value] of weightValueMap.entries()) {
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.labels.push(key);
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(value);
+            }
+
+        },
+        setComponentOptionsWeightForSpecificFoodMulti() {
+            var weightValueMap = new Map();
+            this.componentSelection.selectOptions.map(selectOption => {
+                weightValueMap.set(selectOption.value, 0);
+            });
+            this.setFreshChartData("Value Rankings for All Time");
+            this.dateLogs.filter(dateLog => dateLog.foods.has(this.foodSelection.id)).map(dateLog => {
+                const componentValues = dateLog.components.get(this.componentSelection.id);
+                componentValues.values.map(value => {
+                    if (weightValueMap.has(value)) {
+                        weightValueMap.set(value, weightValueMap.get(value) + 1);
+                    }
+                });   
+            });
+            for (const [key, value] of weightValueMap.entries()) {
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.labels.push(key);
+                this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets[0].data.push(value);
+            }
+        },
+        setFreshChartData(dataLabel) {
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.labels = [];
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets = [];
+            this.chartStore.charts[this.chartStoreLastIndex].chartData.datasets.push({
+                label: dataLabel,
+                data: []
+            });
+        },
         removeTempChart() {
             this.chartStore.charts.pop();
             this.newChart = {
@@ -293,12 +374,7 @@ export default {
             this.foodSelection = null;
         },
         notifyChartUpdates() {
-            bus.$emit('chart-type-update', {
-                chart: this.chartStore.charts[this.chartStoreLastIndex]
-            });
-        },
-        notifyChartTypeUpdate() {
-            bus.$emit('chart-type-update', {
+            bus.$emit('chart-update', {
                 chart: this.chartStore.charts[this.chartStoreLastIndex]
             });
         },
@@ -378,7 +454,7 @@ export default {
                                 })
                                 const componentValueMap = new Map();
                                 dateLog.data().components.map(component => {
-                                    componentValueMap.set(component.id, component.value);
+                                    componentValueMap.set(component.id, component);
                                 })
                                 
                                 const dateLogData = {
